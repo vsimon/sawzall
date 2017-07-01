@@ -1,0 +1,44 @@
+version: "3"
+
+services:
+  # this is the log summary app
+  app:
+    image: golang:1.8.3
+    volumes:
+    - .:/go/src/github.com/vsimon/sawzall
+    - nginxvolume:/var/log/nginx
+    - statslogvolume:/var/log
+    working_dir: /go/src/github.com/vsimon/sawzall
+    command: go run ./cmd/sawzall/main.go
+
+  # this is the nginx web server generating access logs. access logs are shared
+  # with the summary app through the nginxvolume.
+  nginx:
+    image: nginx:1.13.1-alpine
+    volumes:
+    - ./demo-confs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    - ./demo-confs/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    - nginxvolume:/var/log/nginx
+    ports:
+    - "80:80"
+    # unlink access.log symlink since we don't need the docker log collector
+    command: sh -c "unlink /var/log/nginx/access.log && nginx -g \"daemon off;\""
+
+  # this is a tool which makes http requests to nginx
+  tsung:
+    image: ddragosd/tsung-docker:1.6.0
+    volumes:
+    - ./demo-confs/tsung:/usr/local/tsung
+    command: -f /usr/local/tsung/http_simple.xml -l /.logs start
+
+  # this is just a simple viewer to view the summaries for a demo. stats logs
+  # are shared with the summary app through the statslogvolume.
+  viewer:
+    image: alpine:3.6
+    volumes:
+    - statslogvolume:/var/log
+    command: sh -c "touch /var/log/stats.log && tail -n0 -f /var/log/stats.log"
+
+volumes:
+  nginxvolume: {}
+  statslogvolume: {}
